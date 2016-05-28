@@ -1,8 +1,8 @@
 /*
 * @Author: tudou
 * @Date:   2016-05-26 10:11:03
-* @Last Modified by:   tudou
-* @Last Modified time: 2016-05-28 09:28:01
+* @Last Modified by:   xiwang
+* @Last Modified time: 2016-05-28 17:33:23
  */
 
 package main
@@ -10,11 +10,11 @@ package main
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	//	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 //HostServer host server
@@ -51,7 +51,13 @@ func findLink(weburl string) (map[string]string, error) {
 }
 
 func headRequest(weburl string, name string) {
-	resp, err := http.Head(weburl)
+	timeout := time.Duration(10 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+	req, _ := http.NewRequest("HEAD", weburl, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36")
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Println(err)
 		hostChannel <- HostServer{}
@@ -70,9 +76,9 @@ var hostChannel chan HostServer
 func analysisHostServer(weburl string) {
 	links, err := findLink(weburl)
 	if err == nil {
-		for key, link := range links {
+		for link, name := range links {
 			fmt.Printf("requested %s \n", link)
-			go headRequest(key, link)
+			go headRequest(link, name)
 		}
 
 		datas := make(map[string]HostServer)
@@ -80,17 +86,15 @@ func analysisHostServer(weburl string) {
 		i := 0
 	OutLooper:
 		for {
+			data := <-hostChannel
 			i++
-			select {
-			case data := <-hostChannel:
-				fmt.Printf("----%d of %d---received %s \n", i, total, data.Host)
-				datas[data.Host] = data
-				if i >= len(links)-1 {
-					break OutLooper
-				}
+			fmt.Printf("----%d of %d---received %s \n", i, total, data.Host)
+			datas[data.Host] = data
+			if i >= len(links) {
+				break OutLooper
 			}
 		}
-		fmt.Println("---end--")
+
 		i = 0
 		for _, data := range datas {
 			i++
